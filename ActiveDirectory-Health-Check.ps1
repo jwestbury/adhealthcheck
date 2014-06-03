@@ -50,6 +50,12 @@ Get-BpaResult -ModelId Microsoft/Windows/DirectoryServices | ForEach-Object {
 # if we didn't find errors above, update our exit string
 if ($nagStates.Get_Item("Bpa") -eq 0) { $nagExitString += "No errors found in Best Practices Analyzer results. " }
 
+# test case - comment the next two lines in production
+$nagStates.Set_Item("test", 2)
+$nagExitString += "Test error present. "
+
+
+# output our status message for Nagios
 write-host $nagExitString
 
 # evaluate our nagStates hash table and define our exit code
