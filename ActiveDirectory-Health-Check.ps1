@@ -4,9 +4,8 @@ $outputPath = "\users\public\documents\logs"
 $outputFileRepadmin = "Repadmin-"+(Get-Date -Format yyyyMMdd_hhmmss)+".csv"
 $outputFileBpaStauts = "BpaReport-"+(Get-Date -Format yyyyMMdd_hhmmss)+".txt"
 
-# def states for nagios evaluation - we'll set these and evaluate later to see if we need to report an error
-$nagRepadminState = 0
-$nagBpaState = 0
+# def states hash for nagios evaluation - we'll add to this later and evaluate it for exit codes
+$nagStates = @{}
 $nagExitString = ""
 
 # def CSV header
@@ -15,6 +14,9 @@ $Header = "showrepl_COLUMNS","Destination DSA Site","Destination DSA","Naming Co
 
 # create output path if it doesn't exist
 if (!(test-path $outputPath)) { mkdir $outputPath }
+
+# set initial state - 0, no error - for Repadmin
+$nagStates.Set_Item("Repadmin", 0)
 
 # run repadmin create csv
 Invoke-Expression $repCmd | Out-File "$outputPath/$outputFileRepadmin"
@@ -25,25 +27,32 @@ $repadminCsv = Import-Csv -Path "$outputPath/$outputFileRepadmin"
 # parse repadmin statuses, store errors
 if ($repadminStatus = $repadminCsv | Where-Object { $_.showrepl_COLUMNS -notmatch "showrepl_INFO" }) {
     $nagExitString += "Errors in repadmin results. See log at $outputPath\$outputFileRepadmin on "+(hostname)+". "
-    $nagRepadminState = 2
+    $nagStates.SetItem("Repadmin", 2)
 } else {
     $nagExitString += "No errors found in repadmin results. "
 }
+
+# set initial state - 0, no error - for BPA
+$nagStates.Set_Item("Bpa", 0)
 
 # run best practices analyzer on directory services
 Invoke-BpaModel -ModelId Microsoft/Windows/DirectoryServices
 Get-BpaResult -ModelId Microsoft/Windows/DirectoryServices | ForEach Object {
     if ($_.severity -eq "Error") { 
         $_ | Out-File -Append -FilePath "$outputPath\$outputFileBpaStatus"
-        if ($nagBpaState -lt 2) { $nagBpaState = 2; $nagExitString += "Best Practices Analyzer found errors. See log at $outputPath\$outputFileBpaStatus on "+(hostname)+". " }
+        if ($nagStates.Get_Item("Bpa") -lt 2) { $nagStates.Set_Item("Bpa", 2); $nagExitString += "Best Practices Analyzer found errors. See log at $outputPath\$outputFileBpaStatus on "+(hostname)+". " }
     }
     elseif ($_.severity -eq "Warning") { 
-        if ($nagBpaState -eq 0) { $nagBpaState = 1 }
+        if ($nagStates.Get_Item("Bpa") -lt 1) { $nagStates.Set_Item("Bpa", 1) }
     }
 }
 
 # if we didn't find errors above, update our exit string
-if ($nagBpaState -eq 0) { $nagExitString += "No errors found in Best Practices Analyzer results. " }
-
+if ($nagStates.Get_Item("Bpa") -eq 0) { $nagExitString += "No errors found in Best Practices Analyzer results. " }
 
 write-host $nagExitString
+
+# evaluate our nagStates hash table and define our exit code
+if ($nagStates.values -eq 2) { exit 2 }
+elseif ($nagStates.values -eq 1) { exit 1 }
+else { exit 0 }
