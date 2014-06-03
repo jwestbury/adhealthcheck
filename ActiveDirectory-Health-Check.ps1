@@ -37,7 +37,7 @@ $nagStates.Set_Item("Bpa", 0)
 
 # run best practices analyzer on directory services
 Invoke-BpaModel -ModelId Microsoft/Windows/DirectoryServices
-Get-BpaResult -ModelId Microsoft/Windows/DirectoryServices | ForEach Object {
+Get-BpaResult -ModelId Microsoft/Windows/DirectoryServices | ForEach-Object {
     if ($_.severity -eq "Error") { 
         $_ | Out-File -Append -FilePath "$outputPath\$outputFileBpaStatus"
         if ($nagStates.Get_Item("Bpa") -lt 2) { $nagStates.Set_Item("Bpa", 2); $nagExitString += "Best Practices Analyzer found errors. See log at $outputPath\$outputFileBpaStatus on "+(hostname)+". " }
